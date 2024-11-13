@@ -7,23 +7,23 @@ from .models import Expense
 from .forms import ExpenseForm
 
 # Update the Expenses data
-@login_required(login_url='/login/')
+@login_required
 def update_expense(request, id):
-    queryset = Expense.objects.get(id=id)
-
+    expense = get_object_or_404(Expense, id=id)
+    
+    # Check if the logged-in user is the one who created the expense
+    if expense.user != request.user:
+        return redirect('expense_list')  # Redirect if the user is not the owner
+    
     if request.method == 'POST':
-        data = request.POST
-        name = data.get('name')
-        price = float(data.get('price', 0))  # Change int() to float()
-
-        # Update the expense object
-        queryset.name = name
-        queryset.amount = price  # Use 'amount' instead of 'price' based on your model
-        queryset.save()
-        return redirect('/')
-
-    context = {'expense': queryset}
-    return render(request, 'update_expenses.html', context)
+        form = ExpenseForm(request.POST, instance=expense)
+        if form.is_valid():
+            form.save()
+            return redirect('expense_list')
+    else:
+        form = ExpenseForm(instance=expense)
+    
+    return render(request, 'update_expense.html', {'form': form})
 
 # Delete the Expenses data
 @login_required(login_url='/login/')
@@ -121,24 +121,30 @@ def pdf(request):
     return render(request, 'pdf.html', context)
 
 # Add Expense function
+@login_required  # Ensure the user is logged in
 def add_expense(request):
     if request.method == 'POST':
-        name = request.POST.get('name')
-        amount = request.POST.get('amount')
-
-        # Create a new Expense object and save it to the database
-        Expense.objects.create(name=name, amount=amount)
-        return redirect('your_expenses_page')  # Change this to the name of your expense listing page
-
-    # Display the form and existing expenses
-    expenses = Expense.objects.all()
-    total_sum = sum(exp.amount for exp in expenses)  # Sum up all expenses
-    return render(request, 'expenses.html', {'expenses': expenses, 'total_sum': total_sum})
+        form = ExpenseForm(request.POST)
+        if form.is_valid():
+            # Add the logged-in user to the expense before saving it
+            expense = form.save(commit=False)
+            expense.user = request.user  # Associate the expense with the logged-in user
+            expense.save()
+            return redirect('expense_list')  # Redirect to the expense list page
+    else:
+        form = ExpenseForm()
+    
+    return render(request, 'add_expense.html', {'form': form})
 
 # List all expenses
+from django.contrib.auth.decorators import login_required
+
+
+@login_required
 def expense_list(request):
-    expenses = Expense.objects.all()
-    return render(request, 'expense_list.html', {'expenses': expenses})
+    # Only fetch the expenses for the logged-in user
+    expenses = Expense.objects.filter(user=request.user)
+    return render(request, 'home/expense_list.html', {'expenses': expenses})
 
 # Expense view function
 @login_required(login_url='/login/')
